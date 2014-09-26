@@ -92,13 +92,14 @@ def publish(simout_data):
         pass
     msg = simout()
     msg.roll = fdm.get('phi',units='radians')               #roll
+    print(msg.roll)
     msg.pitch = fdm.get('theta',units='radians')            #pitch
     msg.yaw = fdm.get('psi',units='radians')                #yaw
     msg.rollspeed = fdm.get('phidot',units='rps')           #rollspeed
     msg.pitchspeed = fdm.get('thetadot',units='rps')        #pitchspeed
     msg.yawspeed = fdm.get('psidot',units='rps')            #yawspeed
     time_now = rospy.get_time()
-    print("delta_t: ", time_now - last_time)
+    #print("delta_t: ", time_now - last_time)
     last_time = time_now
     
     pub.publish(msg)
