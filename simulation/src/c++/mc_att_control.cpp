@@ -234,16 +234,16 @@ MulticopterAttitudeControl::MulticopterAttitudeControl()
 
 	//set parameters, hard-coded for now
 	/* roll gains */
-	_params.att_p(0) = 3;
-	_params.rate_p(0) = 0.01;
-	_params.rate_i(0) = 0.00;
-	_params.rate_d(0) = 0.01;
+	_params.att_p(0) = 10;
+	_params.rate_p(0) = 0.2;
+	_params.rate_i(0) = 0.01;
+	_params.rate_d(0) = 0.05;
 
 	/* pitch gains */
-	_params.att_p(1) = 5.0;
-	_params.rate_p(1) = 0.01;
+	_params.att_p(1) = 10.0;
+	_params.rate_p(1) = 0.2;
 	_params.rate_i(1) = 0.01;
-	_params.rate_d(1) = 0.01;
+	_params.rate_d(1) = 0.05;
 
 	/* yaw gains */
 	_params.att_p(2) = 3;
