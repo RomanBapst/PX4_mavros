@@ -75,7 +75,6 @@
 
 using namespace std;
 
-
 class MulticopterAttitudeControl: public MulticopterAttitudeControlBase {
 public:
 	/**
@@ -96,15 +95,16 @@ private:
 
 	//ros publishers
 	ros::Publisher _actuators_0_pub;
-	ros::Publisher att_rates_pub;
+	ros::Publisher _att_rates_sp_pub;
 	ros::Publisher _att_pub;
 
 	//Class methods
-	void attitude_cb(const mavros::Attitude msg); //called when new attitude message arrives
-	void rc_cb(const mavros::ManualControl msg); //called when new manual attitude setpoint arrives
-	void armed_status_cb(mavros::ArmedState msg); //called when new heartbeat message arrives (contains armed status)
-	void fill_rates_msg(mavros::AttitudeRates &msg); //fill message with attitude rates
-	void task_main(); 						//this is called by 'attitude_cb'
+	void attitude_cb(const mavros::Attitude msg); 		//called when new attitude message arrives
+	void rc_cb(const mavros::ManualControl msg); 		//called when new manual attitude setpoint arrives
+	void armed_status_cb(mavros::ArmedState msg); 		//called when new heartbeat message arrives (contains armed status)
+	void fill_rates_msg(mavros::AttitudeRates &msg); 	//fill message with attitude rates
+	void fill_actuator_msg(mavros::Actuator &msg);		//fill actuator message
+	void task_main(); 									//this is called by 'attitude_cb'
 
 };
 
@@ -118,7 +118,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() {
 			&MulticopterAttitudeControl::armed_status_cb, this);
 
 	//setup all publishers
-	att_rates_pub = n.advertise<mavros::AttitudeRates>(
+	_att_rates_sp_pub = n.advertise<mavros::AttitudeRates>(
 			"MulticopterAttitudeControl/att_rates", 10);
 	_att_pub = n.advertise<mavros::AttitudeSetpoint>(
 			"MulticopterAttitudeControl/att_setpoint", 10);
@@ -172,7 +172,7 @@ void MulticopterAttitudeControl::attitude_cb(const mavros::Attitude msg) {
 	_v_att.pitchspeed = msg.pitchspeed;
 	_v_att.yawspeed = msg.yawspeed;
 
-//	//calculate Rotation matrix
+//	//calculate Rotation matrix (this has to be done via quaternions in future because of singularity issues!!!)
 	math::Matrix<3, 3> R;
 	R.from_euler(_v_att.roll, _v_att.pitch, _v_att.yaw);
 
@@ -204,10 +204,18 @@ void MulticopterAttitudeControl::armed_status_cb(mavros::ArmedState msg) {
 }
 
 void MulticopterAttitudeControl::fill_rates_msg(mavros::AttitudeRates &msg) {
-	msg.rollrate = _v_rates_sp.roll;
-	msg.pitchrate = _v_rates_sp.pitch;
-	msg.yawrate = _v_rates_sp.yaw;
-	msg.thrust = _v_rates_sp.thrust;
+	msg.rollrate 	= _v_rates_sp.roll;
+	msg.pitchrate 	= _v_rates_sp.pitch;
+	msg.yawrate 	= _v_rates_sp.yaw;
+	msg.thrust 		= _v_rates_sp.thrust;
+}
+
+void MulticopterAttitudeControl::fill_actuator_msg(mavros::Actuator &msg) {
+	msg.roll 	= _actuators.control[0];
+	msg.pitch 	= _actuators.control[1];
+	msg.yaw 	= _actuators.control[2];
+	msg.thrust 	= _actuators.control[3];
+
 }
 
 void MulticopterAttitudeControl::task_main() {
@@ -233,17 +241,19 @@ void MulticopterAttitudeControl::task_main() {
 		_v_rates_sp.thrust = _thrust_sp;
 		_v_rates_sp.timestamp = 0;	//put time here
 
-		//publish attitude rates
+		//publish attitude rate setpoint
 		mavros::AttitudeRates message;
 		fill_rates_msg(message);
-		att_rates_pub.publish(message);
+		_att_rates_sp_pub.publish(message);
 
 	} else {
 		/* attitude controller disabled, poll rates setpoint topic */
 		if (_v_control_mode.flag_control_manual_enabled) {
 			/* manual rates control - ACRO mode */
 			//do something with vector _rates_sp
-			//_rates_sp = math::Vector<3>(_manual_control_sp.y, -_manual_control_sp.x, _manual_control_sp.r).emult(_params.acro_rate_max);
+			_rates_sp = math::Vector<3>(_manual_control_sp.y,
+					-_manual_control_sp.x, _manual_control_sp.r).emult(
+					_params.acro_rate_max);
 			_thrust_sp = _manual_control_sp.z;
 
 			/* reset yaw setpoint after ACRO */
@@ -256,10 +266,10 @@ void MulticopterAttitudeControl::task_main() {
 			_v_rates_sp.thrust = _thrust_sp;
 			_v_rates_sp.timestamp = 0;	//put correct timestamp
 
-			//publish attitude rates
+			//publish attitude rate setpoint
 			mavros::AttitudeRates message;
 			fill_rates_msg(message);
-			att_rates_pub.publish(message);
+			_att_rates_sp_pub.publish(message);
 
 		} else {
 			/* attitude controller disabled, poll rates setpoint topic */
@@ -282,10 +292,13 @@ void MulticopterAttitudeControl::task_main() {
 		_actuators.control[2] =
 				(isfinite(_att_control(2))) ? _att_control(2) : 0.0f;
 		_actuators.control[3] = (isfinite(_thrust_sp)) ? _thrust_sp : 0.0f;
-		//_actuators.timestamp = hrt_absolute_time();
+		_actuators.timestamp = hrt_absolute_time();
 
 		if (!_actuators_0_circuit_breaker_enabled) {
-			//publish the actuator commands in here!!!
+			//publish the actuator controls
+			mavros::Actuator message;
+			fill_actuator_msg(message);
+			_actuators_0_pub.publish(message);
 		}
 	}
 	perf_end (_loop_perf);
